@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
+// URL DO SERVIDOR (Agora apontando para a nuvem Vercel)
+const API_URL = 'https://institutional-tracker-backend.vercel.app/api';
+
 const MonitorIndices = () => {
     const [data, setData] = useState(null);
     const [currentTime, setCurrentTime] = useState('');
 
-    // Relógio UTC-5 (Simulado para bater com Python)
+    // Relógio UTC-5
     useEffect(() => {
         const timer = setInterval(() => {
             const now = new Date();
@@ -19,12 +22,13 @@ const MonitorIndices = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const res = await axios.get('http://localhost:3001/api/indices-data');
+                // CORREÇÃO AQUI: Usando o link da Vercel
+                const res = await axios.get(`${API_URL}/indices-data`);
                 setData(res.data || {});
             } catch (err) { console.error(err); }
         };
         fetchData();
-        const interval = setInterval(fetchData, 5000); // Atualiza a cada 5s
+        const interval = setInterval(fetchData, 5000);
         return () => clearInterval(interval);
     }, []);
 
@@ -32,7 +36,7 @@ const MonitorIndices = () => {
 
     const indices = data.data;
 
-    // Ordenação exata do inicio.py: IDX_ primeiro, depois o resto
+    // Ordenação
     const sortedKeys = Object.keys(indices).sort((a, b) => {
         const isAIdx = a.startsWith('IDX_');
         const isBIdx = b.startsWith('IDX_');
@@ -41,25 +45,17 @@ const MonitorIndices = () => {
         return a.localeCompare(b);
     });
 
-    // Função auxiliar formatada (SEM COR, SEM %)
     const getFormat = (val) => {
         const num = val || 0;
-        // Cor fixa branca para os valores
         const color = 'text-white';
         let arrow = '→';
-
-        // Define apenas a seta
         if (num > 0.01) { arrow = '↑'; }
         if (num < -0.01) { arrow = '↓'; }
-
-        // Retorna sem o símbolo '%'
         return { color, arrow, formatted: num.toFixed(3) };
     };
 
     return (
         <div className="w-full min-h-screen bg-black text-gray-300 font-mono p-6 md:p-10 selection:bg-white/20">
-
-            {/* Cabeçalho do Sistema */}
             <div className="text-gray-500 text-xs mb-8 border-b border-dashed border-gray-800 pb-4 uppercase leading-relaxed">
                 ================================================================================<br />
                 C:\SYSTEM\GLOBAL_INDICES_MONITOR.EXE [UTC-5: {currentTime}]<br />
@@ -67,11 +63,8 @@ const MonitorIndices = () => {
                 LAST UPDATE: {data.metadata?.last_update || 'WAITING...'}
             </div>
 
-            {/* Tabela de Índices (Layout mantido) */}
             <div className="overflow-x-auto">
                 <div className="min-w-[600px] max-w-4xl">
-
-                    {/* Cabeçalho da Tabela */}
                     <div className="flex text-xs font-bold text-white border-b-2 border-white/20 pb-2 mb-2 uppercase tracking-wider">
                         <div className="w-32 pl-2">ATIVO</div>
                         <div className="w-32 text-right border-l border-gray-800/50">1H</div>
@@ -79,7 +72,6 @@ const MonitorIndices = () => {
                         <div className="w-32 text-right border-l border-gray-800/50">DIÁRIO</div>
                     </div>
 
-                    {/* Linhas de Dados */}
                     <div className="flex flex-col gap-0.5">
                         {sortedKeys.map((key) => {
                             const row = indices[key] || {};
@@ -89,20 +81,13 @@ const MonitorIndices = () => {
 
                             return (
                                 <div key={key} className="flex items-center text-sm hover:bg-white/5 py-1.5 border-b border-gray-900/50 transition-colors">
-                                    {/* Coluna Nome */}
                                     <div className="w-32 pl-2 font-bold text-white tracking-wide">{key}</div>
-
-                                    {/* Coluna 1H */}
                                     <div className={`w-32 text-right font-bold border-l border-gray-800/30 ${f1h.color}`}>
                                         {f1h.formatted} <span className="inline-block w-3 text-center ml-1 text-gray-400">{f1h.arrow}</span>
                                     </div>
-
-                                    {/* Coluna 4H */}
                                     <div className={`w-32 text-right font-bold border-l border-gray-800/30 ${f4h.color}`}>
                                         {f4h.formatted} <span className="inline-block w-3 text-center ml-1 text-gray-400">{f4h.arrow}</span>
                                     </div>
-
-                                    {/* Coluna Diário */}
                                     <div className={`w-32 text-right font-bold border-l border-gray-800/30 ${fD.color}`}>
                                         {fD.formatted} <span className="inline-block w-3 text-center ml-1 text-gray-400">{fD.arrow}</span>
                                     </div>
@@ -110,11 +95,9 @@ const MonitorIndices = () => {
                             );
                         })}
                     </div>
-
                 </div>
             </div>
 
-            {/* Rodapé Decorativo */}
             <div className="mt-8 text-[10px] text-gray-600 animate-pulse">
                 _ WAITING FOR NEXT TICK...
             </div>

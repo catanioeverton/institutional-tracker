@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
+// URL DO SERVIDOR (Agora apontando para a nuvem Vercel)
+const API_URL = 'https://institutional-tracker-backend.vercel.app/api';
+
 const Terminal = () => {
     const [history, setHistory] = useState([]);
     const [currentTime, setCurrentTime] = useState('');
@@ -19,7 +22,8 @@ const Terminal = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const res = await axios.get('http://localhost:3001/api/get-strength-history');
+                // CORREÇÃO AQUI: Usando o link da Vercel
+                const res = await axios.get(`${API_URL}/get-strength-history`);
                 setHistory(res.data || []);
             } catch (err) { console.error(err); }
         };
@@ -35,9 +39,7 @@ const Terminal = () => {
     // Função de Renderização Vertical
     const renderSection = (title, dataKey, scoreKey) => {
         const data = latest[dataKey] || {};
-        // GARANTIA DO SCORE: Busca explicitamente o objeto de scores usando a chave correta
         const scores = latest[scoreKey] || {};
-
         const sorted = Object.entries(data).sort(([, a], [, b]) => b - a);
 
         return (
@@ -47,29 +49,17 @@ const Terminal = () => {
                 </div>
                 <div className="flex flex-col">
                     {sorted.map(([curr, val]) => {
-                        // Pega o score da moeda atual
                         const score = scores[curr] !== undefined ? scores[curr] : 0;
                         const arrow = val > 0.005 ? '↑' : val < -0.005 ? '↓' : '→';
 
                         return (
                             <div key={curr} className="flex items-center text-sm font-mono hover:bg-white/10 py-0.5">
-                                {/* Moeda Fixa */}
                                 <span className="w-12 font-bold text-white">{curr}:</span>
-
-                                {/* Valor Alinhado (Branco, sem cores) */}
-                                <span className="w-20 text-right text-white">
-                                    {val.toFixed(3)}
-                                </span>
-
-                                {/* Separador */}
+                                <span className="w-20 text-right text-white">{val.toFixed(3)}</span>
                                 <span className="mx-4 text-gray-600">|</span>
-
-                                {/* Score Alinhado */}
                                 <span className="w-24 text-gray-400">
                                     Score: <span className="text-white ml-1">{String(score).padStart(2, ' ')}</span>
                                 </span>
-
-                                {/* Seta */}
                                 <span className="text-white ml-2">{arrow}</span>
                             </div>
                         );
@@ -81,22 +71,18 @@ const Terminal = () => {
 
     return (
         <div className="w-full min-h-screen bg-black text-gray-300 font-mono p-8 selection:bg-white/20">
-
-            {/* Cabeçalho */}
             <div className="text-gray-500 text-xs mb-8 border-b border-dashed border-gray-800 pb-4 uppercase">
                 ================================================================================
                 <br />
                 C:\SYSTEM\INSTITUTIONAL_TRACKER.EXE [UTC-5: {currentTime}]
             </div>
 
-            {/* Conteúdo Vertical (Um embaixo do outro) */}
             <div className="flex flex-col items-start">
                 {renderSection('1 HORA', 'h1', 'scores_h1')}
                 {renderSection('4 HORAS', 'h4', 'scores_h4')}
                 {renderSection('DIÁRIO', 'daily', 'scores_daily')}
             </div>
 
-            {/* Rodapé - Setups */}
             <div className="mt-8 pt-4 border-t border-dashed border-gray-800 w-full max-w-4xl">
                 <div className="text-xs text-yellow-600 font-bold mb-3 uppercase tracking-widest">[ SETUPS DETECTADOS ]</div>
                 <div className="flex flex-wrap gap-10 text-sm font-bold font-mono">
@@ -114,7 +100,6 @@ const Terminal = () => {
                     </div>
                 </div>
             </div>
-
         </div>
     );
 };
