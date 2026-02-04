@@ -1,13 +1,13 @@
 import axios from 'axios';
 
-// URL DO BACKEND NA VERCEL
-// (Quando você subir o backend, copie a URL dele e cole aqui no lugar deste texto)
+// URL FIXA DA VERCEL (Copie exatamente o link do seu Backend em 'Domains' na Vercel)
+// Exemplo: 'https://institutional-tracker-backend.vercel.app'
 const PROD_URL = 'https://institutional-tracker-backend.vercel.app';
 
 const api = axios.create({
-    baseURL: (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-        ? 'http://localhost:3001/api' // Usa Localhost se estiver no seu PC
-        : `${PROD_URL}/api`            // Usa Vercel se estiver na internet
+    // FORÇAMOS usar sempre a URL da produção, mesmo estando local.
+    // Isso garante que se funcionar no seu PC, TEM que funcionar no celular.
+    baseURL: `${PROD_URL}/api`
 });
 
 export default api;
