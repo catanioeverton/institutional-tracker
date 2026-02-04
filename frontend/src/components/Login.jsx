@@ -1,75 +1,101 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from '../utils/api';
 
-const Login = ({ onLoginSuccess, onClose }) => {
+export default function Login({ onLoginSuccess, onClose }) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
 
     const handleLogin = async (e) => {
         e.preventDefault();
+        setLoading(true);
         setError('');
 
         try {
-            // Chamada corrigida para a porta 3001
-            const response = await axios.post('http://localhost:3001/api/login', {
-                username,
-                password
-            });
+            console.log("Iniciando tentativa de login...");
 
-            if (response.data) {
-                onLoginSuccess(response.data);
-            }
+            // Tenta enviar para o Backend
+            const { data } = await api.post('/login', { username, password });
+
+            console.log("Login sucesso:", data);
+            onLoginSuccess(data);
+
         } catch (err) {
-            // Exibe o erro se o usuário ou senha estiverem incorretos
-            setError("Acesso negado. Verifique suas credenciais.");
-            console.error("Erro no login:", err);
+            console.error("Erro no Login:", err);
+
+            // --- DIAGNÓSTICO DETALHADO (ISSO VAI APARECER NA TELA DO CELULAR) ---
+            if (err.response) {
+                // O servidor respondeu (Conexão OK), mas recusou o login
+                // Ex: 401 (Senha errada) ou 500 (Erro no código)
+                setError(`NEGADO PELO SERVIDOR (${err.response.status}): ${err.response.data.error || 'Dados incorretos'}`);
+            } else if (err.request) {
+                // O servidor NÃO respondeu (Conexão falhou)
+                // Isso acontece se o link estiver errado ou internet bloqueando
+                setError('ERRO DE CONEXÃO: O celular não encontrou o servidor. Verifique a internet ou o link da API.');
+            } else {
+                // Outro tipo de erro
+                setError(`ERRO INTERNO: ${err.message}`);
+            }
+        } finally {
+            setLoading(false);
         }
     };
 
     return (
-        <div className="bg-[#0f172a] border border-[#22d3ee]/20 p-8 rounded-2xl w-full max-w-md shadow-2xl relative">
-            <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-white">✕</button>
+        <div className="bg-[#0a1120] p-8 rounded-2xl border border-white/10 shadow-2xl w-full max-w-md relative">
+            {/* Botão Fechar */}
+            <button
+                onClick={onClose}
+                className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors"
+            >
+                ✕
+            </button>
 
             <div className="text-center mb-8">
-                <div className="text-[#22d3ee] text-4xl mb-4">🔒</div>
-                <h2 className="text-2xl font-bold text-white uppercase tracking-tighter">Acesso Restrito</h2>
-                <p className="text-gray-400 text-xs mt-2 uppercase tracking-widest">Área do Membro Elite</p>
+                <div className="text-4xl mb-4">🔒</div>
+                <h2 className="text-2xl font-black uppercase tracking-wider text-white">Acesso Restrito</h2>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-gray-500 mt-2">Área do Membro Elite</p>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={handleLogin} className="flex flex-col gap-4">
                 <div>
                     <input
                         type="text"
-                        placeholder="Usuário"
-                        className="w-full bg-[#1e293b] border border-white/5 p-4 rounded-xl text-white outline-none focus:border-[#22d3ee]/50 transition-all"
+                        placeholder="Usuário (Ex: admin)"
+                        className="w-full bg-[#050a14] border border-white/10 p-4 rounded-lg text-white placeholder-gray-600 focus:border-[#22d3ee] focus:outline-none transition-colors"
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        required
+                        disabled={loading}
                     />
                 </div>
+
                 <div>
                     <input
                         type="password"
                         placeholder="Senha"
-                        className="w-full bg-[#1e293b] border border-white/5 p-4 rounded-xl text-white outline-none focus:border-[#22d3ee]/50 transition-all"
+                        className="w-full bg-[#050a14] border border-white/10 p-4 rounded-lg text-white placeholder-gray-600 focus:border-[#22d3ee] focus:outline-none transition-colors"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        required
+                        disabled={loading}
                     />
                 </div>
 
-                {error && <p className="text-red-500 text-[10px] text-center uppercase font-bold">{error}</p>}
+                {/* MENSAGEM DE ERRO (Agora detalhada em vermelho) */}
+                {error && (
+                    <div className="bg-red-500/10 border border-red-500/20 p-3 rounded text-red-500 text-xs font-bold text-center uppercase tracking-wide">
+                        {error}
+                    </div>
+                )}
 
                 <button
                     type="submit"
-                    className="w-full bg-[#22d3ee] text-[#0f172a] font-black py-4 rounded-xl uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-[0_0_20px_rgba(34,211,238,0.3)]"
+                    disabled={loading}
+                    className="bg-[#22d3ee] text-[#050a14] font-black uppercase tracking-widest py-4 rounded-lg hover:bg-[#22d3ee]/90 transition-all mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    Entrar
+                    {loading ? 'Verificando...' : 'Entrar'}
                 </button>
             </form>
         </div>
     );
-};
-
-export default Login;
+}
