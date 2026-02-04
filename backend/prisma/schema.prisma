@@ -1,0 +1,27 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // O link real agora vem do arquivo prisma.config.ts criado acima
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String   @id @default(uuid())
+  username        String   @unique
+  password        String
+  perm_monitor    Boolean  @default(false)
+  perm_aovivo     Boolean  @default(false)
+  perm_planilha   Boolean  @default(false)
+  perm_terminal   Boolean  @default(false)
+  perm_admin      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+}
+
+model CurrencyStrength {
+  id         Int      @id @default(autoincrement())
+  timestamp  DateTime @default(now())
+  data       Json
+}

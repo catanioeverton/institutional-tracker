@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+:root {
+  background-color: #050a14;
+  color: white;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+}

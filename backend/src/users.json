@@ -1,0 +1,12 @@
+[
+  {
+    "username": "admin",
+    "password": "123",
+    "role": "admin",
+    "permissions": {
+      "aovivo": true,
+      "terminal": true,
+      "monitor": true
+    }
+  }
+]
