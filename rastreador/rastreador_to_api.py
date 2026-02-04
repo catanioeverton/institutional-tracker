@@ -7,15 +7,15 @@ import requests
 import os
 
 # ==============================================================================
-# CONFIGURAÇÕES
+# CONFIGURAÇÕES (CORRIGIDAS PARA VERCEL)
 # ==============================================================================
-# URLs para envio (ajuste se seu servidor tiver rotas diferentes)
-API_URL_FOREX = "http://localhost:3001/api/update-strength"
-API_URL_INDICES = "http://localhost:3001/api/update-indices" # Nova rota sugerida
+# Agora apontamos para a nuvem, não mais para o localhost
+API_URL_FOREX = "https://institutional-tracker-backend.vercel.app/api/update-strength"
+API_URL_INDICES = "https://institutional-tracker-backend.vercel.app/api/update-indices"
 
 currencies = ['EUR', 'USD', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD']
 
-# Lista de Índices (Copiado do inicio.py)
+# Lista de Índices
 assets_indices = {
     'IDX_USD':  'DX-Y.NYB',
     'IDX_EUR':  '6E=F',
@@ -43,7 +43,6 @@ last_readings = {"1h": {}, "4h": {}, "daily": {}}
 # ==============================================================================
 def get_trend_arrow(mode, asset, current_val):
     global last_readings
-    # Inicializa se não existir
     if mode not in last_readings: last_readings[mode] = {}
     
     if asset not in last_readings[mode] or last_readings[mode][asset] is None:
@@ -103,12 +102,11 @@ def calculate_strength(mode):
     return pd.Series(strength_map), pd.Series(score_map)
 
 # ==============================================================================
-# CÁLCULO ÍNDICES (Copiado do inicio.py)
+# CÁLCULO ÍNDICES
 # ==============================================================================
 def get_data_change_indices(name, ticker_symbol, mode):
     try:
         ticker = yf.Ticker(ticker_symbol)
-        # Índices usam dados de 1H para economizar requisições, igual ao inicio.py
         hist = ticker.history(period="5d", interval="1h")
         
         if hist is None or hist.empty or len(hist) < 5: return 0.0
@@ -117,7 +115,6 @@ def get_data_change_indices(name, ticker_symbol, mode):
         current_price = hist['Close'].iloc[-1]
         
         if mode == "daily":
-            # Lógica exata do inicio.py: Voltar 1 dia e buscar 17:00
             ontem = datetime.now(TZ_OPERACIONAL) - timedelta(days=1)
             alvo_data = ontem.replace(hour=17, minute=0, second=0, microsecond=0)
             try:
@@ -151,14 +148,12 @@ def run_monitor():
     s4h, sc4h = calculate_strength("4h")
     sd, scd = calculate_strength("daily")
     
-    # Exibe Forex
     exibicao = [("1h", "1 HORA", s1h, sc1h), ("4h", "4 HORAS", s4h, sc4h), ("daily", "DIÁRIO", sd, scd)]
     for m_key, m_label, series, scores in exibicao:
         print(f"\n[ {m_label} FOREX ]")
         for curr, val in series.sort_values(ascending=False).items():
             arrow = get_trend_arrow(m_key, curr, val)
             print(f"{curr}: {val:>7} | Score: {scores[curr]:>2} {arrow}")
-        # Salva leitura para a próxima seta
         if m_key not in last_readings: last_readings[m_key] = {}
         for curr, val in series.items(): last_readings[m_key][curr] = val
 
@@ -168,7 +163,6 @@ def run_monitor():
     print("⏳ Calculando Índices...")
     indices_data = {}
     
-    # Ordena: IDX_ primeiro, depois o resto
     ordered_keys = [k for k in assets_indices.keys() if 'IDX_' in k] + [k for k in assets_indices.keys() if 'IDX_' not in k]
     
     print(f"\n[ MONITOR ÍNDICES ]")
@@ -181,15 +175,12 @@ def run_monitor():
         vD  = get_data_change_indices(name, sym, "daily")
         
         indices_data[name] = {"1h": v1h, "4h": v4h, "daily": vD}
-        
-        # Exibição simplificada
         print(f"{name:<10} | {v1h:>7.3f}% | {v4h:>7.3f}% | {vD:>7.3f}%")
 
     print("-" * 55)
     
-    # --- 3. ENVIO PARA O SITE ---
+    # --- 3. ENVIO PARA O SITE (VERCEL) ---
     
-    # Payload Forex
     payload_forex = {"data": {
         "h1": s1h.to_dict(), "h4": s4h.to_dict(), "daily": sd.to_dict(),
         "scores_h1": sc1h.to_dict(), "scores_h4": sc4h.to_dict(), "scores_daily": scd.to_dict(),
@@ -198,25 +189,24 @@ def run_monitor():
         "setup_daily": f"{sd.idxmax()}/{sd.idxmin()}"
     }}
     
-    # Payload Índices (Novo)
     payload_indices = {
         "metadata": {"last_update": now.strftime('%H:%M:%S')},
         "data": indices_data
     }
     
     try:
-        # Envia Forex
+        # Envia Forex para Vercel
+        print("📤 Enviando Forex para a nuvem...")
         requests.post(API_URL_FOREX, json=payload_forex)
-        print(f"✅ Forex Enviado! Setup Daily: {payload_forex['data']['setup_daily']}")
+        print(f"✅ Forex Enviado com sucesso!")
         
-        # Envia Índices (Tenta enviar para uma rota de índices, se o servidor aceitar)
-        # Se você estiver usando o motor_calculo.py como servidor, ele precisa ter a rota /api/update-indices
-        # Caso contrário, você pode adaptar para enviar tudo junto, dependendo do seu backend.
+        # Envia Índices para Vercel
+        print("📤 Enviando Índices para a nuvem...")
         requests.post(API_URL_INDICES, json=payload_indices)
-        print(f"✅ Índices Enviados!")
+        print(f"✅ Índices Enviados com sucesso!")
         
     except Exception as e: 
-        print(f"❌ Erro de Conexão: O Site parece estar offline ou recusou a conexão.")
+        print(f"❌ Erro de Conexão com a Vercel: {e}")
 
 def wait_until_next_run():
     while True:
