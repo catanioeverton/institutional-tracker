@@ -1,14 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
+// DEFININDO O LINK DA API (VERCEL)
+const API_URL = 'https://institutional-tracker-backend.vercel.app/api';
+
 const LiveMonitor = () => {
     const [strengths, setStrengths] = useState({});
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const response = await axios.get('http://localhost:3001/api/get-strength');
-                setStrengths(response.data.data || {});
+                // Alterado para API_URL e para o endpoint que existe no backend (get-strength-history)
+                const response = await axios.get(`${API_URL}/get-strength-history?limit=1`);
+
+                // Adaptação para ler o dado do histórico, caso venha como array
+                if (response.data && response.data.length > 0) {
+                    setStrengths(response.data[0].data.h1 || {});
+                } else if (response.data.data) {
+                    setStrengths(response.data.data || {});
+                }
             } catch (err) {
                 console.error("Erro ao carregar monitor:", err);
             }
@@ -29,7 +39,8 @@ const LiveMonitor = () => {
                     <div className="w-full bg-gray-800 h-1.5 mt-3 rounded-full overflow-hidden">
                         <div
                             className="bg-[#22d3ee] h-full transition-all duration-500"
-                            style={{ width: `${(value / 10) * 100}%` }}
+                            // Adicionei Math.abs para a barra não quebrar com números negativos
+                            style={{ width: `${Math.abs(value / 10) * 100}%` }}
                         ></div>
                     </div>
                 </div>

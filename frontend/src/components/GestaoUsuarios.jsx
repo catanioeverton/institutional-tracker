@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
+// DEFININDO O LINK DA API (VERCEL)
+const API_URL = 'https://institutional-tracker-backend.vercel.app/api';
+
 const GestaoUsuarios = () => {
     const [users, setUsers] = useState([]);
     const [form, setForm] = useState({
@@ -11,7 +14,8 @@ const GestaoUsuarios = () => {
 
     const fetchUsers = async () => {
         try {
-            const res = await axios.get('http://localhost:3001/api/users');
+            // Alterado para API_URL
+            const res = await axios.get(`${API_URL}/users`);
             setUsers(res.data);
         } catch (err) { console.error("Erro ao listar usuários", err); }
     };
@@ -32,10 +36,12 @@ const GestaoUsuarios = () => {
         e.preventDefault();
         try {
             if (editingId) {
-                await axios.put(`http://localhost:3001/api/users/${editingId}`, form);
+                // Alterado para API_URL
+                await axios.put(`${API_URL}/users/${editingId}`, form);
                 alert("Usuário atualizado com sucesso!");
             } else {
-                await axios.post('http://localhost:3001/api/users', form);
+                // Alterado para API_URL
+                await axios.post(`${API_URL}/users`, form);
                 alert("Usuário criado com sucesso!");
             }
             setForm({ username: '', password: '', email: '', role: 'user', permissions: { aovivo: false, terminal: false, monitor: false, historico: false } });
@@ -58,7 +64,8 @@ const GestaoUsuarios = () => {
     const handleDelete = async (id) => {
         if (window.confirm("Tem certeza que deseja excluir este usuário permanentemente?")) {
             try {
-                await axios.delete(`http://localhost:3001/api/users/${id}`);
+                // Alterado para API_URL
+                await axios.delete(`${API_URL}/users/${id}`);
                 fetchUsers();
             } catch (err) { alert("Erro ao excluir."); }
         }
