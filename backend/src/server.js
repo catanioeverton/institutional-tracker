@@ -138,57 +138,41 @@ async function appendToGoogleDrive(content) {
 app.post('/api/login', async (req, res) => {
     let { username, password } = req.body;
 
-    // --- ÁREA DE DEBUG (O que está chegando do celular?) ---
-    console.log("\n========================================");
-    console.log("🔍 NOVA TENTATIVA DE LOGIN DETECTADA");
-    console.log("1. Recebido Bruto (JSON):", JSON.stringify(req.body));
+    // Forçar limpeza de caracteres invisíveis
+    const cleanUsername = username ? username.trim() : "";
+    const cleanPassword = password ? password.trim() : "";
 
-    // Limpeza de Espaços
-    const originalUsername = username;
-    const originalPassword = password;
-
-    if (username) username = username.trim();
-    if (password) password = password.trim();
-
-    console.log(`2. Após limpeza (.trim): Usuário='${username}' | Senha='${password}'`);
-    if (originalPassword !== password) console.log("⚠️ AVISO: A senha original tinha espaços extras!");
+    console.log(`🔍 Tentativa de login: [${cleanUsername}]`);
 
     try {
-        // Busca o usuário no banco ignorando Maiúscula/Minúscula (ilike)
+        // Busca usando .eq e .maybeSingle para evitar erros de processamento
         const { data: user, error } = await supabase
             .from('User')
             .select('*')
-            .eq('username', username.trim())
+            .eq('username', cleanUsername)
             .maybeSingle();
-        // Verificações
-        if (error || !user) {
-            console.log("❌ ERRO: Usuário não encontrado no Supabase.");
+
+        if (error) {
+            console.error("❌ Erro na consulta Supabase:", error.message);
+            return res.status(500).json({ error: "Erro interno no banco" });
+        }
+
+        if (!user) {
+            console.log(`❌ Usuário [${cleanUsername}] não localizado no banco.`);
             return res.status(401).json({ error: "Usuário não encontrado" });
         }
 
-        console.log(`3. Usuário encontrado no Banco: ID ${user.id} (${user.username})`);
-        console.log(`   Senha no Banco: '${user.password}'`);
-
-        // A senha deve ser exata
-        if (user.password !== password) {
-            console.log("❌ ERRO: Senha incorreta!");
-            console.log(`   Esperado (Banco): '${user.password}' (Tamanho: ${user.password.length})`);
-            console.log(`   Recebido (Input): '${password}' (Tamanho: ${password.length})`);
-
-            // Dica extra no log se for problema de Maiúscula/Minúscula na senha
-            if (user.password.toLowerCase() === password.toLowerCase()) {
-                console.log("💡 DICA: A senha está certa, mas a Maiúscula/Minúscula está diferente.");
-            }
-
+        // Comparação de senha
+        if (user.password !== cleanPassword) {
+            console.log(`❌ Senha incorreta para o usuário: ${cleanUsername}`);
             return res.status(401).json({ error: "Senha incorreta" });
         }
 
-        console.log("✅ SUCESSO: Login aprovado.");
-        console.log("========================================\n");
-
-        // Sucesso
+        console.log("✅ Login aprovado para:", cleanUsername);
         res.json({
-            id: user.id, username: user.username, role: user.role,
+            id: user.id,
+            username: user.username,
+            role: user.role,
             permissions: {
                 aovivo: user.perm_aovivo,
                 terminal: user.perm_terminal,
@@ -197,7 +181,7 @@ app.post('/api/login', async (req, res) => {
             }
         });
     } catch (err) {
-        console.error("🔥 ERRO CRÍTICO NO LOGIN:", err);
+        console.error("🔥 Erro fatal no login:", err);
         res.status(500).json({ error: "Erro interno no servidor" });
     }
 });
