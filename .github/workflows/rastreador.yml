@@ -2,6 +2,8 @@ name: Robô do Rastreador (5 em 5 min)
 
 on:
   push:
+    branches:
+      - main
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
