@@ -54,9 +54,18 @@ async function appendToGoogleDrive(csvRow) {
         } else {
             const header = "Data;AUD_1h;AUD_4h;AUD_D;CAD_1h;CAD_4h;CAD_D;CHF_1h;CHF_4h;CHF_D;EUR_1h;EUR_4h;EUR_D;GBP_1h;GBP_4h;GBP_D;JPY_1h;JPY_4h;JPY_D;NZD_1h;NZD_4h;NZD_D;USD_1h;USD_4h;USD_D;Setup_H1;Setup_H4;Setup_Daily";
             await drive.files.create({
-                requestBody: { name: fileName, parents: [DRIVE_FOLDER_ID] },
-                media: { mimeType: 'text/csv', body: header + '\n' + csvRow },
-                supportsAllDrives: true
+                requestBody: {
+                    name: fileName,
+                    parents: [DRIVE_FOLDER_ID],
+                },
+                media: {
+                    mimeType: 'text/csv',
+                    body: header + '\n' + csvRow,
+                },
+                // ESTAS TRÊS LINHAS SÃO O COMBO PARA MATAR O ERRO DE COTA:
+                supportsAllDrives: true,
+                keepRevisionForever: true,
+                fields: 'id'
             });
             console.log(`✅ Planilha Forex [${fileName}] criada.`);
         }
