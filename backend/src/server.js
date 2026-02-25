@@ -99,38 +99,55 @@ const formatCsvRow = (data) => {
     return row;
 };
 
-async function appendToGoogleDrive(content) {
-    try {
-        const fileName = `historico_forca_${new Date().toISOString().split('T')[0]}.csv`;
+async function appendIndicesToGoogleDrive(indicesData) {
+    if (!drive) return;
 
+    const folderId = DRIVE_FOLDER_ID;
+    const fileName = `historico_indices_${new Date().toISOString().split('T')[0]}.csv`;
+
+    try {
         const res = await drive.files.list({
-            q: `name = '${fileName}' and '${DRIVE_FOLDER_ID}' in parents and trashed = false`,
-            fields: 'files(id)',
+            q: `name = '${fileName}' and '${folderId}' in parents and trashed = false`,
+            fields: 'files(id, name)',
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true
         });
 
-        if (res.data.files.length > 0) {
-            const fileId = res.data.files[0].id;
+        const file = res.data.files[0];
+        const now = new Date();
+        const ts = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) - (5 * 60 * 60 * 1000))
+            .toISOString().replace('T', ' ').substring(0, 19);
 
-            // --- CORREÇÃO AQUI ---
-            // Para anexar na Vercel, o método mais seguro é baixar e subir ou 
-            // usar o modo de atualização de mídia.
+        // Prepara a linha: Timestamp + todos os valores de 1h, 4h e Diário
+        let csvRow = `${ts}`;
+        const ativos = Object.keys(indicesData);
+        ativos.forEach(ativo => {
+            const d = indicesData[ativo];
+            csvRow += `;${d.h1 || 0};${d.h4 || 0};${d.daily || 0}`;
+        });
+
+        if (file) {
+            const existingFile = await drive.files.get({ fileId: file.id, alt: 'media', supportsAllDrives: true });
             await drive.files.update({
-                fileId: fileId,
-                media: {
-                    mimeType: 'text/csv',
-                    body: content // O Google Drive API v3 permite substituir o conteúdo
-                }
+                fileId: file.id,
+                media: { mimeType: 'text/csv', body: existingFile.data + '\n' + csvRow },
+                supportsAllDrives: true
             });
+            console.log(`✅ Planilha de Índices [${fileName}] atualizada.`);
         } else {
-            const header = "Horario;1h_AUD;4h_AUD;D_AUD;1h_CAD;4h_CAD;D_CAD;1h_CHF;4h_CHF;D_CHF;1h_EUR;4h_EUR;D_EUR;1h_GBP;4h_GBP;D_GBP;1h_JPY;4h_JPY;D_JPY;1h_NZD;4h_NZD;D_NZD;1h_USD;4h_USD;D_USD;Setup_1H;Setup_4H;Setup_Daily\n";
+            // Cria cabeçalho dinâmico baseado nos ativos enviados
+            let header = "Data";
+            ativos.forEach(ativo => { header += `;1h_${ativo};4h_${ativo};D_${ativo}`; });
+
             await drive.files.create({
-                requestBody: { name: fileName, parents: [DRIVE_FOLDER_ID] },
-                media: { mimeType: 'text/csv', body: header + content },
+                requestBody: { name: fileName, parents: [folderId] },
+                media: { mimeType: 'text/csv', body: header + '\n' + csvRow },
+                supportsAllDrives: true
             });
+            console.log(`✅ Planilha de Índices [${fileName}] criada.`);
         }
-        console.log(`✅ Planilha atualizada no Drive: ${fileName}`);
     } catch (err) {
-        console.error("⚠️ Erro na API do Drive:", err.message);
+        console.error("⚠️ Erro Drive Índices:", err.message);
     }
 }
 
@@ -216,12 +233,24 @@ app.post('/api/update-strength', marketGuard, async (req, res) => {
 
 // --- ÍNDICES (COM CACHE E FILTRO) ---
 app.post('/api/update-indices', marketGuard, async (req, res) => {
-    const payload = req.body; // Recebe o 'payload_indices' do Python
+    const payload = req.body;
     if (payload?.data) {
-        indicesCache = payload;
-        await supabase.from('indiceshistory').insert([{ data: payload.data }]);
+        try {
+            indicesCache = payload;
+            // 1. Salva no Supabase
+            await supabase.from('indiceshistory').insert([{ data: payload.data }]);
+
+            // 2. NOVO: Salva no Google Drive
+            await appendIndicesToGoogleDrive(payload.data);
+
+            res.sendStatus(200);
+        } catch (err) {
+            console.error("Erro ao processar índices:", err);
+            res.sendStatus(500);
+        }
+    } else {
+        res.sendStatus(400);
     }
-    res.sendStatus(200);
 });
 
 app.get('/api/indices-data', async (req, res) => {
