@@ -62,11 +62,11 @@ async function appendToGoogleDrive(csvRow) {
                     mimeType: 'text/csv',
                     body: header + '\n' + csvRow,
                 },
-                // COMBO PARA FORÇAR USO DA SUA COTA:
                 supportsAllDrives: true,
-                keepRevisionForever: true, // Garante que o arquivo seja tratado como dado persistente
+                keepRevisionForever: true, // Adicione esta linha
                 fields: 'id'
             });
+
             console.log(`✅ Planilha Forex [${fileName}] criada.`);
         }
     } catch (err) { console.error("⚠️ Erro Drive Forex:", err.message); }
@@ -191,66 +191,6 @@ const formatCsvRow = (data) => {
     return row;
 };
 
-async function appendIndicesToGoogleDrive(indicesData) {
-    if (!drive) return;
-
-    const folderId = DRIVE_FOLDER_ID;
-    const fileName = `historico_indices_${new Date().toISOString().split('T')[0]}.csv`;
-
-    try {
-        const res = await drive.files.list({
-            q: `name = '${fileName}' and '${folderId}' in parents and trashed = false`,
-            fields: 'files(id, name)',
-            supportsAllDrives: true,
-            includeItemsFromAllDrives: true
-        });
-
-        const file = res.data.files[0];
-        const now = new Date();
-        const ts = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) - (5 * 60 * 60 * 1000))
-            .toISOString().replace('T', ' ').substring(0, 19);
-
-        // Prepara a linha: Timestamp + todos os valores de 1h, 4h e Diário
-        let csvRow = `${ts}`;
-        const ativos = Object.keys(indicesData);
-        ativos.forEach(ativo => {
-            const d = indicesData[ativo];
-            csvRow += `;${d.h1 || 0};${d.h4 || 0};${d.daily || 0}`;
-        });
-
-        if (file) {
-            const existingFile = await drive.files.get({ fileId: file.id, alt: 'media', supportsAllDrives: true });
-            await drive.files.update({
-                fileId: file.id,
-                media: { mimeType: 'text/csv', body: existingFile.data + '\n' + csvRow },
-                supportsAllDrives: true
-            });
-            console.log(`✅ Planilha de Índices [${fileName}] atualizada.`);
-        } else {
-            // Cria cabeçalho dinâmico baseado nos ativos enviados
-            let header = "Data";
-            ativos.forEach(ativo => { header += `;1h_${ativo};4h_${ativo};D_${ativo}`; });
-
-            await drive.files.create({
-                requestBody: {
-                    name: fileName,
-                    parents: [DRIVE_FOLDER_ID],
-                },
-                media: {
-                    mimeType: 'text/csv',
-                    body: header + '\n' + csvRow,
-                },
-                // COMBO PARA FORÇAR USO DA SUA COTA:
-                supportsAllDrives: true,
-                keepRevisionForever: true, // Garante que o arquivo seja tratado como dado persistente
-                fields: 'id'
-            });
-            console.log(`✅ Planilha de Índices [${fileName}] criada.`);
-        }
-    } catch (err) {
-        console.error("⚠️ Erro Drive Índices:", err.message);
-    }
-}
 
 // --- LOGIN (COM MODO ESPIÃO/DEBUG ATIVADO) ---
 app.post('/api/login', async (req, res) => {
