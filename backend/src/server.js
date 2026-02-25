@@ -158,8 +158,8 @@ app.post('/api/login', async (req, res) => {
         const { data: user, error } = await supabase
             .from('User')
             .select('*')
-            .eq('username', username.trim()) // Usando .eq para teste exato
-            .single();
+            .eq('username', username.trim())
+            .maybeSingle();
         // Verificações
         if (error || !user) {
             console.log("❌ ERRO: Usuário não encontrado no Supabase.");
