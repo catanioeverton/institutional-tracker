@@ -105,9 +105,18 @@ async function appendIndicesToGoogleDrive(indicesData) {
             let header = "Data";
             ativos.forEach(ativo => { header += `;1h_${ativo};4h_${ativo};D_${ativo}`; });
             await drive.files.create({
-                requestBody: { name: fileName, parents: [DRIVE_FOLDER_ID] },
-                media: { mimeType: 'text/csv', body: header + '\n' + csvRow },
-                supportsAllDrives: true
+                requestBody: {
+                    name: fileName,
+                    parents: [DRIVE_FOLDER_ID],
+                },
+                media: {
+                    mimeType: 'text/csv',
+                    body: header + '\n' + csvRow,
+                },
+                // ESTE COMBO É O QUE VAI DESTRAVAR:
+                supportsAllDrives: true,
+                keepRevisionForever: true, // Força o arquivo a ser tratado como persistente
+                fields: 'id'
             });
             console.log(`✅ Planilha Índices [${fileName}] criada.`);
         }
