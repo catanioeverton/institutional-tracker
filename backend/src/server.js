@@ -62,9 +62,9 @@ async function appendToGoogleDrive(csvRow) {
                     mimeType: 'text/csv',
                     body: header + '\n' + csvRow,
                 },
-                // ESTAS TRÊS LINHAS SÃO O COMBO PARA MATAR O ERRO DE COTA:
+                // COMBO PARA FORÇAR USO DA SUA COTA:
                 supportsAllDrives: true,
-                keepRevisionForever: true,
+                keepRevisionForever: true, // Garante que o arquivo seja tratado como dado persistente
                 fields: 'id'
             });
             console.log(`✅ Planilha Forex [${fileName}] criada.`);
@@ -113,9 +113,9 @@ async function appendIndicesToGoogleDrive(indicesData) {
                     mimeType: 'text/csv',
                     body: header + '\n' + csvRow,
                 },
-                // ESTE COMBO É O QUE VAI DESTRAVAR:
+                // COMBO PARA FORÇAR USO DA SUA COTA:
                 supportsAllDrives: true,
-                keepRevisionForever: true, // Força o arquivo a ser tratado como persistente
+                keepRevisionForever: true, // Garante que o arquivo seja tratado como dado persistente
                 fields: 'id'
             });
             console.log(`✅ Planilha Índices [${fileName}] criada.`);
@@ -232,9 +232,18 @@ async function appendIndicesToGoogleDrive(indicesData) {
             ativos.forEach(ativo => { header += `;1h_${ativo};4h_${ativo};D_${ativo}`; });
 
             await drive.files.create({
-                requestBody: { name: fileName, parents: [folderId] },
-                media: { mimeType: 'text/csv', body: header + '\n' + csvRow },
-                supportsAllDrives: true
+                requestBody: {
+                    name: fileName,
+                    parents: [DRIVE_FOLDER_ID],
+                },
+                media: {
+                    mimeType: 'text/csv',
+                    body: header + '\n' + csvRow,
+                },
+                // COMBO PARA FORÇAR USO DA SUA COTA:
+                supportsAllDrives: true,
+                keepRevisionForever: true, // Garante que o arquivo seja tratado como dado persistente
+                fields: 'id'
             });
             console.log(`✅ Planilha de Índices [${fileName}] criada.`);
         }
