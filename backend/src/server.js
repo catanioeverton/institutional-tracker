@@ -3,124 +3,62 @@ const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
-const { google } = require('googleapis');
+// 1. Configuração do Supabase (Movida para o topo)
+const supabaseUrl = 'https://lofcuoeibkhuoaddcgwn.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxvZmN1b2VpYmtodW9hZGRjZ3duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxNTg0NjAsImV4cCI6MjA4NTczNDQ2MH0.ZbZECkvojwCN2X_C9gN2w_1h20elC3um2ovsgCqqTcM';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Configuração de Autenticação do Google Drive com Proteção
-let drive;
-try {
-    const serviceAccountVar = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+// --- 2. NOVAS FUNÇÕES DE GRAVAÇÃO NO SUPABASE STORAGE ---
+async function saveToSupabaseStorage(fileName, header, csvRow) {
+    try {
+        // Tenta baixar o arquivo atual do bucket 'planilhas'
+        const { data, error } = await supabase.storage.from('planilhas').download(fileName);
+        let newContent = "";
 
-    if (serviceAccountVar) {
-        // Tenta converter a string da Vercel em objeto JSON
-        const serviceAccount = JSON.parse(serviceAccountVar);
+        if (error || !data) {
+            // Se o arquivo não existir, cria com o cabeçalho
+            newContent = header + '\n' + csvRow;
+        } else {
+            // Se existir, converte o conteúdo para texto e anexa a nova linha
+            const text = await data.text();
+            newContent = text + '\n' + csvRow;
+        }
 
-        const auth = new google.auth.GoogleAuth({
-            credentials: serviceAccount,
-            scopes: ['https://www.googleapis.com/auth/drive.file'],
+        // Faz o upload substituindo (upsert) o arquivo antigo pelo novo atualizado
+        const { error: uploadError } = await supabase.storage.from('planilhas').upload(fileName, newContent, {
+            contentType: 'text/csv',
+            upsert: true
         });
 
-        drive = google.drive({ version: 'v3', auth });
-        console.log("✅ Google Drive API configurada com sucesso.");
-    } else {
-        console.warn("⚠️ Aviso: Variável GOOGLE_SERVICE_ACCOUNT_JSON não encontrada.");
+        if (uploadError) throw uploadError;
+        console.log(`✅ CSV [${fileName}] atualizado no Supabase Storage!`);
+    } catch (err) {
+        console.error(`⚠️ Erro no Storage para ${fileName}:`, err.message);
     }
-} catch (err) {
-    // Se a chave estiver ruim, o servidor avisa no log mas NÃO TRAVA o login
-    console.error("❌ Erro ao processar JSON da conta de serviço:", err.message);
 }
-// ID da sua pasta do Drive que você enviou
-const DRIVE_FOLDER_ID = '1u4EhTBCJYq2l2U7UaSnXr6MGKLf700uo';
-// --- FUNÇÕES DE GRAVAÇÃO NO DRIVE (CORRIGIDAS) ---
 
-async function appendToGoogleDrive(csvRow) {
-    if (!drive) return;
+async function appendForexToStorage(csvRow) {
     const fileName = `historico_forca_${new Date().toISOString().split('T')[0]}.csv`;
-    try {
-        const res = await drive.files.list({
-            q: `name = '${fileName}' and '${DRIVE_FOLDER_ID}' in parents and trashed = false`,
-            fields: 'files(id, name)',
-            supportsAllDrives: true,
-            includeItemsFromAllDrives: true
-        });
-        const file = res.data.files[0];
-        if (file) {
-            const existingFile = await drive.files.get({ fileId: file.id, alt: 'media', supportsAllDrives: true });
-            await drive.files.update({
-                fileId: file.id,
-                media: { mimeType: 'text/csv', body: existingFile.data + '\n' + csvRow },
-                supportsAllDrives: true
-            });
-            console.log(`✅ Planilha Forex [${fileName}] atualizada.`);
-        } else {
-            const header = "Data;AUD_1h;AUD_4h;AUD_D;CAD_1h;CAD_4h;CAD_D;CHF_1h;CHF_4h;CHF_D;EUR_1h;EUR_4h;EUR_D;GBP_1h;GBP_4h;GBP_D;JPY_1h;JPY_4h;JPY_D;NZD_1h;NZD_4h;NZD_D;USD_1h;USD_4h;USD_D;Setup_H1;Setup_H4;Setup_Daily";
-            await drive.files.create({
-                requestBody: {
-                    name: fileName,
-                    parents: [DRIVE_FOLDER_ID],
-                },
-                media: {
-                    mimeType: 'text/csv',
-                    body: header + '\n' + csvRow,
-                },
-                supportsAllDrives: true,
-                keepRevisionForever: true, // Adicione esta linha
-                fields: 'id'
-            });
-
-            console.log(`✅ Planilha Forex [${fileName}] criada.`);
-        }
-    } catch (err) { console.error("⚠️ Erro Drive Forex:", err.message); }
+    const header = "Data;AUD_1h;AUD_4h;AUD_D;CAD_1h;CAD_4h;CAD_D;CHF_1h;CHF_4h;CHF_D;EUR_1h;EUR_4h;EUR_D;GBP_1h;GBP_4h;GBP_D;JPY_1h;JPY_4h;JPY_D;NZD_1h;NZD_4h;NZD_D;USD_1h;USD_4h;USD_D;Setup_H1;Setup_H4;Setup_Daily";
+    await saveToSupabaseStorage(fileName, header, csvRow);
 }
 
-async function appendIndicesToGoogleDrive(indicesData) {
-    if (!drive) return;
+async function appendIndicesToStorage(indicesData) {
     const fileName = `historico_indices_${new Date().toISOString().split('T')[0]}.csv`;
-    try {
-        const res = await drive.files.list({
-            q: `name = '${fileName}' and '${DRIVE_FOLDER_ID}' in parents and trashed = false`,
-            fields: 'files(id, name)',
-            supportsAllDrives: true,
-            includeItemsFromAllDrives: true
-        });
-        const file = res.data.files[0];
-        const now = new Date();
-        const ts = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) - (5 * 60 * 60 * 1000)).toISOString().replace('T', ' ').substring(0, 19);
+    const now = new Date();
+    const ts = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) - (5 * 60 * 60 * 1000)).toISOString().replace('T', ' ').substring(0, 19);
 
-        let csvRow = `${ts}`;
-        const ativos = Object.keys(indicesData);
-        ativos.forEach(ativo => {
-            const d = indicesData[ativo];
-            csvRow += `;${d.h1 || 0};${d.h4 || 0};${d.daily || 0}`;
-        });
+    let csvRow = `${ts}`;
+    const ativos = Object.keys(indicesData);
+    ativos.forEach(ativo => {
+        const d = indicesData[ativo];
+        csvRow += `;${d.h1 || 0};${d.h4 || 0};${d.daily || 0}`;
+    });
 
-        if (file) {
-            const existingFile = await drive.files.get({ fileId: file.id, alt: 'media', supportsAllDrives: true });
-            await drive.files.update({
-                fileId: file.id,
-                media: { mimeType: 'text/csv', body: existingFile.data + '\n' + csvRow },
-                supportsAllDrives: true
-            });
-            console.log(`✅ Planilha Índices [${fileName}] atualizada.`);
-        } else {
-            let header = "Data";
-            ativos.forEach(ativo => { header += `;1h_${ativo};4h_${ativo};D_${ativo}`; });
-            await drive.files.create({
-                requestBody: {
-                    name: fileName,
-                    parents: [DRIVE_FOLDER_ID],
-                },
-                media: {
-                    mimeType: 'text/csv',
-                    body: header + '\n' + csvRow,
-                },
-                // COMBO PARA FORÇAR USO DA SUA COTA:
-                supportsAllDrives: true,
-                keepRevisionForever: true, // Garante que o arquivo seja tratado como dado persistente
-                fields: 'id'
-            });
-            console.log(`✅ Planilha Índices [${fileName}] criada.`);
-        }
-    } catch (err) { console.error("⚠️ Erro Drive Índices:", err.message); }
+    let header = "Data";
+    ativos.forEach(ativo => { header += `;1h_${ativo};4h_${ativo};D_${ativo}`; });
+
+    await saveToSupabaseStorage(fileName, header, csvRow);
 }
 
 const app = express();
@@ -139,11 +77,6 @@ app.use((req, res, next) => {
     next();
 });
 app.use(express.json());
-
-// Configuração do Supabase
-const supabaseUrl = 'https://lofcuoeibkhuoaddcgwn.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxvZmN1b2VpYmtodW9hZGRjZ3duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxNTg0NjAsImV4cCI6MjA4NTczNDQ2MH0.ZbZECkvojwCN2X_C9gN2w_1h20elC3um2ovsgCqqTcM';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Cache em RAM (Necessário para evitar delay na Vercel)
 let indicesCache = { data: {}, metadata: { last_update: "Inicializando..." } };
@@ -190,7 +123,6 @@ const formatCsvRow = (data) => {
 
     return row;
 };
-
 
 // --- LOGIN (COM MODO ESPIÃO/DEBUG ATIVADO) ---
 app.post('/api/login', async (req, res) => {
@@ -253,6 +185,7 @@ app.get('/api/get-strength-history', async (req, res) => {
     } catch (err) { res.status(500).json([]); }
 });
 
+// 3. ROTA DE FORÇA (Atualizada)
 app.post('/api/update-strength', marketGuard, async (req, res) => {
     const { data } = req.body;
     try {
@@ -262,8 +195,8 @@ app.post('/api/update-strength', marketGuard, async (req, res) => {
         // 2. Formata a linha para o CSV
         const newRow = formatCsvRow(data);
 
-        // 3. Envia para o Google Drive (Função que usará a API que você vai liberar)
-        await appendToGoogleDrive(newRow);
+        // 3. NOVO: Salva direto no Supabase Storage
+        await appendForexToStorage(newRow);
 
         res.sendStatus(200);
     } catch (err) {
@@ -273,16 +206,17 @@ app.post('/api/update-strength', marketGuard, async (req, res) => {
 });
 
 // --- ÍNDICES (COM CACHE E FILTRO) ---
+// 4. ROTA DE ÍNDICES (Atualizada)
 app.post('/api/update-indices', marketGuard, async (req, res) => {
     const payload = req.body;
     if (payload?.data) {
         try {
             indicesCache = payload;
-            // 1. Salva no Supabase
+            // 1. Salva no Supabase banco de dados
             await supabase.from('indiceshistory').insert([{ data: payload.data }]);
 
-            // 2. NOVO: Salva no Google Drive
-            await appendIndicesToGoogleDrive(payload.data);
+            // 2. NOVO: Salva direto no Supabase Storage
+            await appendIndicesToStorage(payload.data);
 
             res.sendStatus(200);
         } catch (err) {
