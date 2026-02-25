@@ -1,10 +1,8 @@
-from http.server import BaseHTTPRequestHandler
 import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 import requests
-import json
 
 # ==============================================================================
 # CONFIGURAÇÕES
@@ -26,17 +24,8 @@ TZ_OPERACIONAL = pytz.timezone('Etc/GMT+5')
 last_readings = {"1h": {}, "4h": {}, "daily": {}}
 
 # ==============================================================================
-# FUNÇÕES AUXILIARES
+# FUNÇÕES AUXILIARES E CÁLCULOS
 # ==============================================================================
-def get_trend_arrow(mode, asset, current_val):
-    global last_readings
-    if mode not in last_readings: last_readings[mode] = {}
-    if asset not in last_readings[mode] or last_readings[mode][asset] is None: return "→"
-    old_val = last_readings[mode][asset]
-    if current_val > old_val + 0.005: return "↑"
-    elif current_val < old_val - 0.005: return "↓"
-    else: return "→"
-
 def calculate_strength(mode):
     data_results = {}
     PERIOD_OFFSET = 12 if mode == "1h" else 48
@@ -105,57 +94,50 @@ def get_data_change_indices(name, ticker_symbol, mode):
     except: return 0.0
 
 # ==============================================================================
-# HANDLER DA VERCEL
+# SCRIPT PRINCIPAL (RODA 1 VEZ POR CHAMADA DO GITHUB)
 # ==============================================================================
-class handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        try:
-            now = datetime.now(TZ_OPERACIONAL)
-            
-            # --- 1. CÁLCULO FOREX ---
-            s1h, sc1h = calculate_strength("1h")
-            s4h, sc4h = calculate_strength("4h")
-            sd, scd = calculate_strength("daily")
-            
-            # --- 2. CÁLCULO ÍNDICES ---
-            indices_data = {}
-            ordered_keys = [k for k in assets_indices.keys() if 'IDX_' in k] + [k for k in assets_indices.keys() if 'IDX_' not in k]
-            
-            for name in ordered_keys:
-                sym = assets_indices[name]
-                v1h = get_data_change_indices(name, sym, "1h")
-                v4h = get_data_change_indices(name, sym, "4h")
-                vD  = get_data_change_indices(name, sym, "daily")
-                indices_data[name] = {"1h": v1h, "4h": v4h, "daily": vD}
+def run():
+    print("🚀 Iniciando rastreamento (GitHub Actions)...")
+    now = datetime.now(TZ_OPERACIONAL)
+    
+    # --- 1. CÁLCULO FOREX ---
+    print("⏳ Calculando Forex...")
+    s1h, sc1h = calculate_strength("1h")
+    s4h, sc4h = calculate_strength("4h")
+    sd, scd = calculate_strength("daily")
+    
+    # --- 2. CÁLCULO ÍNDICES ---
+    print("⏳ Calculando Índices...")
+    indices_data = {}
+    ordered_keys = [k for k in assets_indices.keys() if 'IDX_' in k] + [k for k in assets_indices.keys() if 'IDX_' not in k]
+    
+    for name in ordered_keys:
+        sym = assets_indices[name]
+        v1h = get_data_change_indices(name, sym, "1h")
+        v4h = get_data_change_indices(name, sym, "4h")
+        vD  = get_data_change_indices(name, sym, "daily")
+        indices_data[name] = {"1h": v1h, "4h": v4h, "daily": vD}
 
-            # --- 3. MONTAGEM DOS PAYLOADS ---
-            payload_forex = {"data": {
-                "h1": s1h.to_dict(), "h4": s4h.to_dict(), "daily": sd.to_dict(),
-                "scores_h1": sc1h.to_dict(), "scores_h4": sc4h.to_dict(), "scores_daily": scd.to_dict(),
-                "setup_h1": f"{s1h.idxmax()}/{s1h.idxmin()}",
-                "setup_h4": f"{s4h.idxmax()}/{s4h.idxmin()}",
-                "setup_daily": f"{sd.idxmax()}/{sd.idxmin()}"
-            }}
-            
-            payload_indices = {
-                "metadata": {"last_update": now.strftime('%H:%M:%S')},
-                "data": indices_data
-            }
-            
-            # --- 4. ENVIO PARA O SITE ---
-            req_forex = requests.post(API_URL_FOREX, json=payload_forex)
-            req_indices = requests.post(API_URL_INDICES, json=payload_indices)
-            
-            # Resposta de Sucesso para a Vercel
-            self.send_response(200)
-            self.send_header('Content-type','text/plain')
-            self.end_headers()
-            mensagem = f"Sucesso! Forex Status: {req_forex.status_code} | Indices Status: {req_indices.status_code}"
-            self.wfile.write(mensagem.encode('utf-8'))
-            
-        except Exception as e:
-            # Resposta de Erro para a Vercel
-            self.send_response(500)
-            self.send_header('Content-type','text/plain')
-            self.end_headers()
-            self.wfile.write(f'Erro no rastreamento: {str(e)}'.encode('utf-8'))
+    # --- 3. MONTAGEM DOS PAYLOADS ---
+    payload_forex = {"data": {
+        "h1": s1h.to_dict(), "h4": s4h.to_dict(), "daily": sd.to_dict(),
+        "scores_h1": sc1h.to_dict(), "scores_h4": sc4h.to_dict(), "scores_daily": scd.to_dict(),
+        "setup_h1": f"{s1h.idxmax()}/{s1h.idxmin()}",
+        "setup_h4": f"{s4h.idxmax()}/{s4h.idxmin()}",
+        "setup_daily": f"{sd.idxmax()}/{sd.idxmin()}"
+    }}
+    
+    payload_indices = {
+        "metadata": {"last_update": now.strftime('%H:%M:%S')},
+        "data": indices_data
+    }
+    
+    # --- 4. ENVIO PARA O SEU BACKEND ---
+    print("📤 Enviando dados para a sua API...")
+    req_forex = requests.post(API_URL_FOREX, json=payload_forex)
+    req_indices = requests.post(API_URL_INDICES, json=payload_indices)
+    
+    print(f"✅ Sucesso! Forex Status: {req_forex.status_code} | Indices Status: {req_indices.status_code}")
+
+if __name__ == "__main__":
+    run()

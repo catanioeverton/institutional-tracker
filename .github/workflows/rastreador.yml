@@ -1,0 +1,26 @@
+name: Robô do Rastreador (5 em 5 min)
+
+on:
+  schedule:
+    # Este é o código universal (Cron) para "a cada 5 minutos"
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # Permite rodar manualmente pelo site do GitHub
+
+jobs:
+  rodar-rastreador:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar o código do repositório
+        uses: actions/checkout@v3
+
+      - name: Instalar o Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Instalar bibliotecas (requirements)
+        run: pip install requests yfinance pandas pytz
+
+      - name: Rodar o script principal
+        run: python rastreador-vercel/rastreador.py
