@@ -5,15 +5,29 @@ require('dotenv').config();
 
 const { google } = require('googleapis');
 
-// Configuração de Autenticação do Google Drive
-const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
-const auth = new google.auth.GoogleAuth({
-    // O JSON da Service Account deve ser colocado nas variáveis de ambiente da Vercel
-    credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '{}'),
-    scopes: SCOPES,
-});
-const drive = google.drive({ version: 'v3', auth });
+// Configuração de Autenticação do Google Drive com Proteção
+let drive;
+try {
+    const serviceAccountVar = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
 
+    if (serviceAccountVar) {
+        // Tenta converter a string da Vercel em objeto JSON
+        const serviceAccount = JSON.parse(serviceAccountVar);
+
+        const auth = new google.auth.GoogleAuth({
+            credentials: serviceAccount,
+            scopes: ['https://www.googleapis.com/auth/drive.file'],
+        });
+
+        drive = google.drive({ version: 'v3', auth });
+        console.log("✅ Google Drive API configurada com sucesso.");
+    } else {
+        console.warn("⚠️ Aviso: Variável GOOGLE_SERVICE_ACCOUNT_JSON não encontrada.");
+    }
+} catch (err) {
+    // Se a chave estiver ruim, o servidor avisa no log mas NÃO TRAVA o login
+    console.error("❌ Erro ao processar JSON da conta de serviço:", err.message);
+}
 // ID da sua pasta do Drive que você enviou
 const DRIVE_FOLDER_ID = '1u4EhTBCJYq2l2U7UaSnXr6MGKLf700uo';
 
@@ -21,6 +35,17 @@ const app = express();
 
 // Permite conexões de qualquer lugar (necessário para Vercel/Mobile)
 app.use(cors({ origin: '*' }));
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, Content-Length, X-Requested-With");
+
+    // Responde imediatamente ao preflight do navegador
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    next();
+});
 app.use(express.json());
 
 // Configuração do Supabase
