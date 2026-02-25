@@ -3,6 +3,20 @@ const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
+const { google } = require('googleapis');
+
+// Configuração de Autenticação do Google Drive
+const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
+const auth = new google.auth.GoogleAuth({
+    // O JSON da Service Account deve ser colocado nas variáveis de ambiente da Vercel
+    credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '{}'),
+    scopes: SCOPES,
+});
+const drive = google.drive({ version: 'v3', auth });
+
+// ID da sua pasta do Drive que você enviou
+const DRIVE_FOLDER_ID = '1u4EhTBCJYq2l2U7UaSnXr6MGKLf700uo';
+
 const app = express();
 
 // Permite conexões de qualquer lugar (necessário para Vercel/Mobile)
@@ -16,8 +30,84 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Cache em RAM (Necessário para evitar delay na Vercel)
 let indicesCache = { data: {}, metadata: { last_update: "Inicializando..." } };
+const isMarketOpen = () => {
+    const now = new Date();
+    const utc5 = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) - (5 * 60 * 60 * 1000));
+    const day = utc5.getDay();
+    const hour = utc5.getHours();
+
+    if (day === 0) return hour >= 17;   // Domingo 17h
+    if (day >= 1 && day <= 4) return true; // Seg-Qui
+    if (day === 5) return hour < 16;    // Sexta 16h
+    return false; // Sábado
+};
+
+const marketGuard = (req, res, next) => {
+    if (!isMarketOpen()) {
+        return res.status(503).json({ error: "Mercado Fechado (UTC-5)" });
+    }
+    next();
+};
 
 app.get('/', (req, res) => res.send('API Institutional Tracker Online 🚀'));
+
+const formatCsvRow = (data) => {
+    const now = new Date();
+    // Ajuste para UTC-5 (Horário do Mercado/Itatiba)
+    const ts = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) - (5 * 60 * 60 * 1000))
+        .toISOString().replace('T', ' ').substring(0, 19);
+
+    const currencies = ['AUD', 'CAD', 'CHF', 'EUR', 'GBP', 'JPY', 'NZD', 'USD'];
+    let row = `${ts}`; // Primeira coluna sempre é o Horário
+
+    // Gera colunas: 1h_CURR;4h_CURR;D_CURR para cada uma das 8 moedas
+    currencies.forEach(curr => {
+        const v1h = data.h1?.[curr] || 0;
+        const v4h = data.h4?.[curr] || 0;
+        const vD = data.daily?.[curr] || 0;
+        row += `;${v1h};${v4h};${vD}`;
+    });
+
+    // Finaliza com os Setups identificados pelo Python
+    row += `;${data.setup_h1 || ''};${data.setup_h4 || ''};${data.setup_daily || ''}\n`;
+
+    return row;
+};
+
+async function appendToGoogleDrive(content) {
+    try {
+        const fileName = `historico_forca_${new Date().toISOString().split('T')[0]}.csv`;
+
+        const res = await drive.files.list({
+            q: `name = '${fileName}' and '${DRIVE_FOLDER_ID}' in parents and trashed = false`,
+            fields: 'files(id)',
+        });
+
+        if (res.data.files.length > 0) {
+            const fileId = res.data.files[0].id;
+
+            // --- CORREÇÃO AQUI ---
+            // Para anexar na Vercel, o método mais seguro é baixar e subir ou 
+            // usar o modo de atualização de mídia.
+            await drive.files.update({
+                fileId: fileId,
+                media: {
+                    mimeType: 'text/csv',
+                    body: content // O Google Drive API v3 permite substituir o conteúdo
+                }
+            });
+        } else {
+            const header = "Horario;1h_AUD;4h_AUD;D_AUD;1h_CAD;4h_CAD;D_CAD;1h_CHF;4h_CHF;D_CHF;1h_EUR;4h_EUR;D_EUR;1h_GBP;4h_GBP;D_GBP;1h_JPY;4h_JPY;D_JPY;1h_NZD;4h_NZD;D_NZD;1h_USD;4h_USD;D_USD;Setup_1H;Setup_4H;Setup_Daily\n";
+            await drive.files.create({
+                requestBody: { name: fileName, parents: [DRIVE_FOLDER_ID] },
+                media: { mimeType: 'text/csv', body: header + content },
+            });
+        }
+        console.log(`✅ Planilha atualizada no Drive: ${fileName}`);
+    } catch (err) {
+        console.error("⚠️ Erro na API do Drive:", err.message);
+    }
+}
 
 // --- LOGIN (COM MODO ESPIÃO/DEBUG ATIVADO) ---
 app.post('/api/login', async (req, res) => {
@@ -97,14 +187,28 @@ app.get('/api/get-strength-history', async (req, res) => {
     } catch (err) { res.status(500).json([]); }
 });
 
-app.post('/api/update-strength', async (req, res) => {
+app.post('/api/update-strength', marketGuard, async (req, res) => {
     const { data } = req.body;
-    try { await supabase.from('CurrencyStrength').insert([{ data }]); res.sendStatus(200); } catch (err) { res.sendStatus(500); }
+    try {
+        // 1. Salva no Supabase
+        await supabase.from('CurrencyStrength').insert([{ data }]);
+
+        // 2. Formata a linha para o CSV
+        const newRow = formatCsvRow(data);
+
+        // 3. Envia para o Google Drive (Função que usará a API que você vai liberar)
+        await appendToGoogleDrive(newRow);
+
+        res.sendStatus(200);
+    } catch (err) {
+        console.error("Erro no processamento:", err);
+        res.sendStatus(500);
+    }
 });
 
 // --- ÍNDICES (COM CACHE E FILTRO) ---
-app.post('/api/update-indices', async (req, res) => {
-    const payload = req.body;
+app.post('/api/update-indices', marketGuard, async (req, res) => {
+    const payload = req.body; // Recebe o 'payload_indices' do Python
     if (payload?.data) {
         indicesCache = payload;
         await supabase.from('indiceshistory').insert([{ data: payload.data }]);
